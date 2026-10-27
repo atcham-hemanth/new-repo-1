@@ -2,5 +2,11 @@ hi
 file1 from master 
 
 
+<<<<<<< HEAD
 the new line has been added in the file 1
-the new test line has been added now 
+=======
+>>>>>>> d8161b2 (added file1)
+
+
+the new line for test 
+
