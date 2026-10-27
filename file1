@@ -2,11 +2,12 @@ hi
 file1 from master 
 
 
-<<<<<<< HEAD
-the new line has been added in the file 1
-=======
->>>>>>> d8161b2 (added file1)
+
+the new line has been added in the file1
 
 
 the new line for test 
+
+the latest line added at 21.48 hrs
+
 
