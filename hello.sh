@@ -6,3 +6,5 @@ echo "Current user: $(whoami)"
 echo "Current date: $(date)"
 
 echo "Application build completed successfully!"
+echo " webhooks has been updated successfully"
+
