@@ -1,29 +1,38 @@
-
+cat > /var/jenkins_home/workspace/test3/Jenkinsfile <<'EOF'
 pipeline {
     agent any
+           stage('Check Tools') {
+    steps {
+        sh 'java -version'
+        sh 'mvn -version'
+    }
+}
+    environment {
+        SONAR_PROJECT_KEY = 'hello-java-project'
+    }
 
     stages {
 
         stage('Checkout') {
             steps {
-                echo 'Checking out source code'
-                checkout scm
+                echo 'Checking out source code from GitHub'
+
+                git branch: 'master',
+                    url: 'https://github.com/atcham-hemanth/new-repo-1.git'
             }
         }
 
         stage('Build') {
             steps {
-                echo 'Starting build process'
-                sh 'chmod +x hello.sh'
-                sh './hello.sh'
+                echo 'Building Java application with Maven'
+                sh 'mvn clean package -DskipTests'
             }
         }
 
         stage('Test') {
             steps {
-                echo 'Testing the application'
-                sh 'test -f hello.sh'
-                echo 'Test passed!'
+                echo 'Running Maven tests'
+                sh 'mvn test'
             }
         }
 
@@ -35,9 +44,12 @@ pipeline {
                     withSonarQubeEnv('SonarQube-Server') {
                         sh """
                             ${scannerHome}/bin/sonar-scanner \
-                            -Dsonar.projectKey=hello-project \
-                            -Dsonar.projectName=hello-project \
-                            -Dsonar.sources=. \
+                            -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                            -Dsonar.projectName=${SONAR_PROJECT_KEY} \
+                            -Dsonar.sources=src/main/java \
+                            -Dsonar.tests=src/test/java \
+                            -Dsonar.java.binaries=target/classes \
+                            -Dsonar.java.test.binaries=target/test-classes \
                             -Dsonar.sourceEncoding=UTF-8
                         """
                     }
@@ -47,17 +59,15 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                echo 'Waiting for SonarQube Quality Gate result'
-
                 timeout(time: 5, unit: 'MINUTES') {
                     script {
-                        def qualityGate = waitForQualityGate()
+                        def qg = waitForQualityGate()
 
-                        if (qualityGate.status != 'OK') {
-                            error "Quality Gate FAILED: ${qualityGate.status}"
+                        if (qg.status != 'OK') {
+                            error "Quality Gate failed: ${qg.status}"
                         }
 
-                        echo 'Quality Gate PASSED!'
+                        echo 'Quality Gate passed!'
                     }
                 }
             }
@@ -65,7 +75,7 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                echo 'Quality Gate passed. Ready for deployment!'
+                echo 'Demo Java application deployment successful'
             }
         }
     }
@@ -84,4 +94,5 @@ pipeline {
         }
     }
 }
+
 
