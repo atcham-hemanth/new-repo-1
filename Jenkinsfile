@@ -78,9 +78,36 @@ pipeline {
             }
         }
 
-        stage('Deploy') {
+        stage('Deploy to Nexus') {
             steps {
-                echo 'Demo Java application deployment successful'
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'nexus-credentials',
+                        usernameVariable: 'NEXUS_USERNAME',
+                        passwordVariable: 'NEXUS_PASSWORD'
+                    )
+                ]) {
+                    sh '''
+                        set +x
+                        trap 'rm -f settings-nexus.xml' EXIT
+
+                        cat > settings-nexus.xml <<EOF
+<settings>
+    <servers>
+        <server>
+            <id>nexus-snapshots</id>
+            <username>${NEXUS_USERNAME}</username>
+            <password>${NEXUS_PASSWORD}</password>
+        </server>
+    </servers>
+</settings>
+EOF
+
+                        chmod 600 settings-nexus.xml
+
+                        mvn -s settings-nexus.xml deploy -DskipTests
+                    '''
+                }
             }
         }
     }
