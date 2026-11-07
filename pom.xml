@@ -42,5 +42,12 @@
         </plugins>
     </build>
 
+    <distributionManagement>
+        <snapshotRepository>
+            <id>nexus-snapshots</id>
+            <url>http://13.232.60.187:8081/repository/maven-snapshots-atcham/</url>
+        </snapshotRepository>
+    </distributionManagement>
+
 </project>
 
