@@ -1,12 +1,11 @@
-cat > /var/jenkins_home/workspace/test3/Jenkinsfile <<'EOF'
+
 pipeline {
     agent any
-           stage('Check Tools') {
-    steps {
-        sh 'java -version'
-        sh 'mvn -version'
+
+    tools {
+        maven 'Maven3'
     }
-}
+
     environment {
         SONAR_PROJECT_KEY = 'hello-java-project'
     }
@@ -15,23 +14,29 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                echo 'Checking out source code from GitHub'
-
+                echo 'Checking out GitHub repository'
                 git branch: 'master',
                     url: 'https://github.com/atcham-hemanth/new-repo-1.git'
             }
         }
 
+        stage('Check Tools') {
+            steps {
+                sh 'java -version'
+                sh 'mvn -version'
+            }
+        }
+
         stage('Build') {
             steps {
-                echo 'Building Java application with Maven'
+                echo 'Building Java application'
                 sh 'mvn clean package -DskipTests'
             }
         }
 
         stage('Test') {
             steps {
-                echo 'Running Maven tests'
+                echo 'Running unit tests'
                 sh 'mvn test'
             }
         }
@@ -94,5 +99,4 @@ pipeline {
         }
     }
 }
-
 
