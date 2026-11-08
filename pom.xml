@@ -45,7 +45,7 @@
     <distributionManagement>
         <snapshotRepository>
             <id>nexus-snapshots</id>
-            <url>http://13.232.60.187:8081/repository/maven-snapshots-atcham/</url>
+            <url>http://172.31.45.96:8081/repository/maven-snapshots-atcham/</url>
         </snapshotRepository>
     </distributionManagement>
 
