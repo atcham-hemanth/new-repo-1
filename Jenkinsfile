@@ -8,7 +8,6 @@ pipeline {
 
     environment {
         SONAR_PROJECT_KEY = 'hello-java-project'
-        NEXUS_URL = 'http://172.31.45.96:8081/repository/maven-snapshots-atcham/'
         DEPLOY_HOST = '172.31.9.81'
         DEPLOY_DIR = '/home/ubuntu/hello-java-deploy'
     }
@@ -33,7 +32,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo 'Building Hemanth Java web application'
+                echo 'Building Hemanth Java application'
                 sh 'mvn clean package -DskipTests'
             }
         }
@@ -82,102 +81,41 @@ pipeline {
             }
         }
 
-        stage('Deploy to Nexus') {
+        stage('Prepare Deployment Files') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'nexus-credentials',
-                        usernameVariable: 'NEXUS_USERNAME',
-                        passwordVariable: 'NEXUS_PASSWORD'
-                    )
-                ]) {
-                    sh '''
-                        set +x
-                        trap 'rm -f settings-nexus.xml' EXIT
+                sh '''
+                    set -e
 
-                        cat > settings-nexus.xml <<EOF
-<settings>
-    <servers>
-        <server>
-            <id>nexus-snapshots</id>
-            <username>${NEXUS_USERNAME}</username>
-            <password>${NEXUS_PASSWORD}</password>
-        </server>
-    </servers>
-</settings>
+                    echo "Locating generated JAR..."
+
+                    JAR_FILE=$(find target \
+                        -maxdepth 1 \
+                        -type f \
+                        -name '*.jar' \
+                        ! -name '*-sources.jar' \
+                        ! -name '*-javadoc.jar' \
+                        | head -n 1)
+
+                    if [ -z "$JAR_FILE" ]; then
+                        echo "ERROR: JAR file not found!"
+                        exit 1
+                    fi
+
+                    mkdir -p target/deployment
+
+                    cp "$JAR_FILE" target/deployment/hello-java.jar
+
+                    cat > target/deployment/Dockerfile <<'EOF'
+FROM eclipse-temurin:21-jre
+WORKDIR /app
+COPY hello-java.jar /app/hello-java.jar
+EXPOSE 8080
+CMD ["java", "-cp", "hello-java.jar", "com.example.HelloWorld"]
 EOF
 
-                        chmod 600 settings-nexus.xml
-
-                        mvn -s settings-nexus.xml deploy -DskipTests
-                    '''
-                }
-            }
-        }
-
-        stage('Download from Nexus') {
-            steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'nexus-credentials',
-                        usernameVariable: 'NEXUS_USERNAME',
-                        passwordVariable: 'NEXUS_PASSWORD'
-                    )
-                ]) {
-                    sh '''
-                        set -e
-                        set +x
-
-                        ARTIFACT_BASE="${NEXUS_URL}com/example/hello-java/1.0-SNAPSHOT"
-
-                        echo "Reading snapshot metadata from Nexus..."
-
-                        METADATA=$(curl -fsS \
-                            --user "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
-                            "${ARTIFACT_BASE}/maven-metadata.xml")
-
-                        SNAPSHOT_VERSION=$(printf '%s\\n' "$METADATA" | awk '
-                            /<snapshotVersion>/ {
-                                in_block=1
-                                jar=0
-                                value=""
-                            }
-
-                            in_block && /<extension>jar<\\/extension>/ {
-                                jar=1
-                            }
-
-                            in_block && jar && /<value>/ {
-                                line=$0
-                                sub(/^.*<value>/, "", line)
-                                sub(/<\\/value>.*$/, "", line)
-                                value=line
-                            }
-
-                            /<\\/snapshotVersion>/ {
-                                if (jar && value != "") print value
-                                in_block=0
-                            }
-                        ' | tail -n 1)
-
-                        if [ -z "$SNAPSHOT_VERSION" ]; then
-                            echo "ERROR: Could not find JAR snapshot version"
-                            exit 1
-                        fi
-
-                        echo "Snapshot version: $SNAPSHOT_VERSION"
-
-                        mkdir -p target/deployment
-
-                        curl -fSs \
-                            --user "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
-                            "${ARTIFACT_BASE}/hello-java-${SNAPSHOT_VERSION}.jar" \
-                            -o target/deployment/hello-java.jar
-
-                        echo "Artifact downloaded successfully:"
-                        ls -lh target/deployment/hello-java.jar
-                    '''
-                }
+                    echo "Deployment files prepared:"
+                    ls -lh target/deployment/
+                '''
             }
         }
 
@@ -199,14 +137,6 @@ EOF
                             -o StrictHostKeyChecking=accept-new \
                             "$SSH_USER@$DEPLOY_HOST" \
                             "mkdir -p '$DEPLOY_DIR'"
-
-                        cat > target/deployment/Dockerfile <<'EOF'
-FROM eclipse-temurin:21-jre
-WORKDIR /app
-COPY hello-java.jar /app/hello-java.jar
-EXPOSE 8080
-CMD ["java", "-cp", "hello-java.jar", "com.example.HelloWorld"]
-EOF
 
                         echo "Transferring JAR and Dockerfile..."
 
