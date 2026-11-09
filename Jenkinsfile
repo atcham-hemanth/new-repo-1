@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -32,7 +33,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo 'Building Java web application'
+                echo 'Building Hemanth Java web application'
                 sh 'mvn clean package -DskipTests'
             }
         }
@@ -92,6 +93,7 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
+
                         trap 'rm -f settings-nexus.xml' EXIT
 
                         cat > settings-nexus.xml <<EOF
@@ -173,6 +175,7 @@ EOF
                             "${ARTIFACT_BASE}/hello-java-${SNAPSHOT_VERSION}.jar" \
                             -o target/deployment/hello-java.jar
 
+                        echo "Artifact downloaded successfully:"
                         ls -lh target/deployment/hello-java.jar
                     '''
                 }
@@ -191,6 +194,8 @@ EOF
                     sh '''
                         set -e
 
+                        echo "Preparing deployment directory..."
+
                         ssh -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
                             "$SSH_USER@$DEPLOY_HOST" \
@@ -204,11 +209,15 @@ EXPOSE 8080
 CMD ["java", "-cp", "hello-java.jar", "com.example.HelloWorld"]
 EOF
 
+                        echo "Transferring JAR and Dockerfile..."
+
                         scp -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
                             target/deployment/hello-java.jar \
                             target/deployment/Dockerfile \
                             "$SSH_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
+
+                        echo "Building and starting application..."
 
                         ssh -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
@@ -228,12 +237,27 @@ EOF
 
                              echo 'Waiting for application startup...'
 
-                             for i in \$(seq 1 15); do
-                                 if curl -fsS http://127.0.0.1:8080/; then
+                             for i in \$(seq 1 15)
+                             do
+                                 HTTP_CODE=\$(curl -s \
+                                     -o /tmp/hello-response.txt \
+                                     -w '%{http_code}' \
+                                     http://127.0.0.1:8080/ || true)
+
+                                 if [ \"\$HTTP_CODE\" = '200' ]; then
+                                     echo 'Application response:'
+                                     cat /tmp/hello-response.txt
                                      echo
-                                     echo 'HTTP application is responding!'
-                                     exit 0
+
+                                     if grep -Fxq 'Hello from Hemanth Application!' /tmp/hello-response.txt; then
+                                         echo 'HTTP verification successful!'
+                                         exit 0
+                                     fi
+
+                                     echo 'Unexpected application response!'
+                                     exit 1
                                  fi
+
                                  sleep 2
                              done
 
@@ -242,7 +266,7 @@ EOF
                              exit 1
                             "
 
-                        echo 'Deployment and HTTP verification successful!'
+                        echo "Deployment completed successfully!"
                     '''
                 }
             }
