@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
 
@@ -33,7 +32,7 @@ pipeline {
 
         stage('Build') {
             steps {
-                echo 'Building Java application'
+                echo 'Building Java web application'
                 sh 'mvn clean package -DskipTests'
             }
         }
@@ -93,7 +92,6 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
-
                         trap 'rm -f settings-nexus.xml' EXIT
 
                         cat > settings-nexus.xml <<EOF
@@ -162,11 +160,11 @@ EOF
                         ' | tail -n 1)
 
                         if [ -z "$SNAPSHOT_VERSION" ]; then
-                            echo "ERROR: Could not find JAR snapshot version in Nexus metadata"
+                            echo "ERROR: Could not find JAR snapshot version"
                             exit 1
                         fi
 
-                        echo "Snapshot version found: $SNAPSHOT_VERSION"
+                        echo "Snapshot version: $SNAPSHOT_VERSION"
 
                         mkdir -p target/deployment
 
@@ -175,7 +173,6 @@ EOF
                             "${ARTIFACT_BASE}/hello-java-${SNAPSHOT_VERSION}.jar" \
                             -o target/deployment/hello-java.jar
 
-                        echo "Artifact downloaded successfully:"
                         ls -lh target/deployment/hello-java.jar
                     '''
                 }
@@ -194,8 +191,6 @@ EOF
                     sh '''
                         set -e
 
-                        echo "Preparing deployment directory..."
-
                         ssh -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
                             "$SSH_USER@$DEPLOY_HOST" \
@@ -205,18 +200,15 @@ EOF
 FROM eclipse-temurin:21-jre
 WORKDIR /app
 COPY hello-java.jar /app/hello-java.jar
+EXPOSE 8080
 CMD ["java", "-cp", "hello-java.jar", "com.example.HelloWorld"]
 EOF
-
-                        echo "Transferring JAR and Dockerfile..."
 
                         scp -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
                             target/deployment/hello-java.jar \
                             target/deployment/Dockerfile \
                             "$SSH_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
-
-                        echo "Building and running Docker image on Deployment VM..."
 
                         ssh -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
@@ -228,18 +220,29 @@ EOF
 
                              sudo docker build -t hello-java:latest .
 
-                             echo 'Starting Java application...'
+                             sudo docker run -d \
+                                 --name hello-java \
+                                 --restart unless-stopped \
+                                 -p 8080:8080 \
+                                 hello-java:latest
 
-                             sudo docker run --name hello-java hello-java:latest
+                             echo 'Waiting for application startup...'
 
-                             echo 'Application logs:'
+                             for i in \$(seq 1 15); do
+                                 if curl -fsS http://127.0.0.1:8080/; then
+                                     echo
+                                     echo 'HTTP application is responding!'
+                                     exit 0
+                                 fi
+                                 sleep 2
+                             done
 
+                             echo 'Application did not respond!'
                              sudo docker logs hello-java
-
-                             echo 'Deployment completed successfully!'
+                             exit 1
                             "
 
-                        echo "Deployment completed successfully!"
+                        echo 'Deployment and HTTP verification successful!'
                     '''
                 }
             }
@@ -260,4 +263,5 @@ EOF
         }
     }
 }
+
 

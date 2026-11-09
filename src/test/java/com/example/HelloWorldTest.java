@@ -8,7 +8,7 @@ public class HelloWorldTest {
     @Test
     public void testGetMessage() {
         assertEquals(
-            "Hello from Maven and Jenkins!",
+            "Hello from Hemanth Application!",
             HelloWorld.getMessage()
         );
     }
