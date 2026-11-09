@@ -10,6 +10,7 @@ pipeline {
         SONAR_PROJECT_KEY = 'hello-java-project'
 
         NEXUS_URL = 'http://172.31.45.96:8081/repository/maven-snapshots-atcham/'
+
         DEPLOY_HOST = '172.31.9.81'
         DEPLOY_DIR = '/home/ubuntu/hello-java-deploy'
     }
@@ -19,6 +20,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 echo 'Checking out GitHub repository'
+
                 git branch: 'master',
                     url: 'https://github.com/atcham-hemanth/new-repo-1.git'
             }
@@ -34,6 +36,7 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Building Java application'
+
                 sh 'mvn clean package -DskipTests'
             }
         }
@@ -41,6 +44,7 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running unit tests'
+
                 sh 'mvn test'
             }
         }
@@ -125,41 +129,53 @@ EOF
                     )
                 ]) {
                     sh '''
+                        set -e
                         set +x
-                        trap 'rm -f settings-nexus.xml' EXIT
 
-                        cat > settings-nexus.xml <<EOF
-<settings>
-    <servers>
-        <server>
-            <id>nexus-snapshots</id>
-            <username>${NEXUS_USERNAME}</username>
-            <password>${NEXUS_PASSWORD}</password>
-        </server>
-    </servers>
-</settings>
-EOF
+                        ARTIFACT_BASE="${NEXUS_URL}com/example/hello-java/1.0-SNAPSHOT"
 
-                        chmod 600 settings-nexus.xml
+                        echo "Reading snapshot metadata from Nexus..."
 
-                        # Use a fresh local Maven repository
-                        # so we retrieve the artifact from Nexus.
-                        rm -rf "$WORKSPACE/.m2-nexus-download"
+                        METADATA=$(curl -fsS \
+                            --user "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
+                            "${ARTIFACT_BASE}/maven-metadata.xml")
 
-                        mvn -U \
-                            -s settings-nexus.xml \
-                            -Dmaven.repo.local="$WORKSPACE/.m2-nexus-download" \
-                            org.apache.maven.plugins:maven-dependency-plugin:3.6.1:get \
-                            -Dartifact=com.example:hello-java:1.0-SNAPSHOT \
-                            -Dtransitive=false \
-                            -DremoteRepositories=nexus-snapshots::default::${NEXUS_URL}
+                        SNAPSHOT_VERSION=$(printf '%s\\n' "$METADATA" | awk '
+                            /<snapshotVersion>/ {
+                                in_block=1
+                                jar=0
+                                value=""
+                            }
+                            in_block && /<extension>jar<\\/extension>/ {
+                                jar=1
+                            }
+                            in_block && jar && /<value>/ {
+                                line=$0
+                                sub(/^.*<value>/, "", line)
+                                sub(/<\\/value>.*$/, "", line)
+                                value=line
+                            }
+                            /<\\/snapshotVersion>/ {
+                                if (jar && value != "") print value
+                                in_block=0
+                            }
+                        ' | tail -n 1)
+
+                        if [ -z "$SNAPSHOT_VERSION" ]; then
+                            echo "ERROR: Could not find JAR snapshot version in Nexus metadata"
+                            exit 1
+                        fi
+
+                        echo "Snapshot version found: $SNAPSHOT_VERSION"
 
                         mkdir -p target/deployment
 
-                        cp "$WORKSPACE/.m2-nexus-download/com/example/hello-java/1.0-SNAPSHOT/hello-java-1.0-SNAPSHOT.jar" \
-                           target/deployment/hello-java.jar
+                        curl -fSs \
+                            --user "$NEXUS_USERNAME:$NEXUS_PASSWORD" \
+                            "${ARTIFACT_BASE}/hello-java-${SNAPSHOT_VERSION}.jar" \
+                            -o target/deployment/hello-java.jar
 
-                        echo "Artifact downloaded from Nexus:"
+                        echo "Artifact downloaded successfully:"
                         ls -lh target/deployment/hello-java.jar
                     '''
                 }
@@ -200,7 +216,7 @@ EOF
                             target/deployment/Dockerfile \
                             "$SSH_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
 
-                        echo "Building and running Docker container..."
+                        echo "Building Docker image on Deployment VM..."
 
                         ssh -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
@@ -211,6 +227,8 @@ EOF
                              sudo docker rm -f hello-java >/dev/null 2>&1 || true
 
                              sudo docker build -t hello-java:latest .
+
+                             echo 'Starting Java application...'
 
                              sudo docker run -d --name hello-java hello-java:latest
 
