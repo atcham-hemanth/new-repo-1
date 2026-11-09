@@ -93,7 +93,6 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
-
                         trap 'rm -f settings-nexus.xml' EXIT
 
                         cat > settings-nexus.xml <<EOF
@@ -221,50 +220,57 @@ EOF
 
                         ssh -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
-                            "$SSH_USER@$DEPLOY_HOST" \
-                            "set -e
-                             cd '$DEPLOY_DIR'
+                            "$SSH_USER@$DEPLOY_HOST" 'bash -s' <<'REMOTE'
+set -e
 
-                             sudo docker rm -f hello-java >/dev/null 2>&1 || true
+cd /home/ubuntu/hello-java-deploy
 
-                             sudo docker build -t hello-java:latest .
+echo "Removing old application container..."
 
-                             sudo docker run -d \
-                                 --name hello-java \
-                                 --restart unless-stopped \
-                                 -p 8080:8080 \
-                                 hello-java:latest
+sudo docker rm -f hello-java >/dev/null 2>&1 || true
 
-                             echo 'Waiting for application startup...'
+echo "Building Docker image..."
 
-                             for i in \$(seq 1 15)
-                             do
-                                 HTTP_CODE=\$(curl -s \
-                                     -o /tmp/hello-response.txt \
-                                     -w '%{http_code}' \
-                                     http://127.0.0.1:8080/ || true)
+sudo docker build -t hello-java:latest .
 
-                                 if [ \"\$HTTP_CODE\" = '200' ]; then
-                                     echo 'Application response:'
-                                     cat /tmp/hello-response.txt
-                                     echo
+echo "Starting application container..."
 
-                                     if grep -Fxq 'Hello from Hemanth Application!' /tmp/hello-response.txt; then
-                                         echo 'HTTP verification successful!'
-                                         exit 0
-                                     fi
+sudo docker run -d \
+    --name hello-java \
+    --restart unless-stopped \
+    -p 8080:8080 \
+    hello-java:latest
 
-                                     echo 'Unexpected application response!'
-                                     exit 1
-                                 fi
+echo "Waiting for application startup..."
 
-                                 sleep 2
-                             done
+for i in $(seq 1 15)
+do
+    HTTP_CODE=$(curl -s \
+        -o /tmp/hello-response.txt \
+        -w '%{http_code}' \
+        http://127.0.0.1:8080/ || true)
 
-                             echo 'Application did not respond!'
-                             sudo docker logs hello-java
-                             exit 1
-                            "
+    if [ "$HTTP_CODE" = "200" ]; then
+        echo "Application response:"
+        cat /tmp/hello-response.txt
+        echo
+
+        if grep -Fxq 'Hello from Hemanth Application!' /tmp/hello-response.txt; then
+            echo "HTTP verification successful!"
+            exit 0
+        fi
+
+        echo "Unexpected application response!"
+        exit 1
+    fi
+
+    sleep 2
+done
+
+echo "Application did not respond!"
+sudo docker logs hello-java
+exit 1
+REMOTE
 
                         echo "Deployment completed successfully!"
                     '''
@@ -287,5 +293,4 @@ EOF
         }
     }
 }
-
 
