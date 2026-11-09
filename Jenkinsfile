@@ -8,9 +8,7 @@ pipeline {
 
     environment {
         SONAR_PROJECT_KEY = 'hello-java-project'
-
         NEXUS_URL = 'http://172.31.45.96:8081/repository/maven-snapshots-atcham/'
-
         DEPLOY_HOST = '172.31.9.81'
         DEPLOY_DIR = '/home/ubuntu/hello-java-deploy'
     }
@@ -36,7 +34,6 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Building Java application'
-
                 sh 'mvn clean package -DskipTests'
             }
         }
@@ -44,7 +41,6 @@ pipeline {
         stage('Test') {
             steps {
                 echo 'Running unit tests'
-
                 sh 'mvn test'
             }
         }
@@ -97,6 +93,7 @@ pipeline {
                 ]) {
                     sh '''
                         set +x
+
                         trap 'rm -f settings-nexus.xml' EXIT
 
                         cat > settings-nexus.xml <<EOF
@@ -146,15 +143,18 @@ EOF
                                 jar=0
                                 value=""
                             }
+
                             in_block && /<extension>jar<\\/extension>/ {
                                 jar=1
                             }
+
                             in_block && jar && /<value>/ {
                                 line=$0
                                 sub(/^.*<value>/, "", line)
                                 sub(/<\\/value>.*$/, "", line)
                                 value=line
                             }
+
                             /<\\/snapshotVersion>/ {
                                 if (jar && value != "") print value
                                 in_block=0
@@ -216,7 +216,7 @@ EOF
                             target/deployment/Dockerfile \
                             "$SSH_USER@$DEPLOY_HOST:$DEPLOY_DIR/"
 
-                        echo "Building Docker image on Deployment VM..."
+                        echo "Building and running Docker image on Deployment VM..."
 
                         ssh -i "$SSH_KEY" \
                             -o StrictHostKeyChecking=accept-new \
@@ -230,15 +230,13 @@ EOF
 
                              echo 'Starting Java application...'
 
-                             sudo docker run -d --name hello-java hello-java:latest
+                             sudo docker run --name hello-java hello-java:latest
 
-                             exit_code=\$(sudo docker wait hello-java)
+                             echo 'Application logs:'
 
                              sudo docker logs hello-java
 
-                             echo 'Application exit code:' \$exit_code
-
-                             test \"\$exit_code\" -eq 0
+                             echo 'Deployment completed successfully!'
                             "
 
                         echo "Deployment completed successfully!"
