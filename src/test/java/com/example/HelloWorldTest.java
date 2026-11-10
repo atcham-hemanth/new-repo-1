@@ -8,7 +8,7 @@ class HelloWorldTest {
     @Test
     void testGetMessage() {
         assertEquals(
-            "Hello from ECR Deployment Pipeline!",
+            "Hello from Hemanth App!",
             HelloWorld.getMessage()
         );
     }
