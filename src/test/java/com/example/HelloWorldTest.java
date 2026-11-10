@@ -8,7 +8,8 @@ class HelloWorldTest {
     @Test
     void testGetMessage() {
         assertEquals(
-            "Hello from Hemanth App!",
+            "Hello from Hemanth App!\n" +
+            "Build, Test, Scan and Deploy - Automated through Jenkins CI/CD!",
             HelloWorld.getMessage()
         );
     }

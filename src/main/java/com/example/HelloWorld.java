@@ -8,7 +8,7 @@ import java.nio.charset.StandardCharsets;
 public class HelloWorld {
 
     public static String getMessage() {
-        return "Hello from Hemanth App!";
+        return "Hello from Hemanth App!\nBuild, Test, Scan and Deploy - Automated through Jenkins CI/CD!";
     }
 
     public static void main(String[] args) throws Exception {
